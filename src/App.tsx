@@ -456,7 +456,9 @@ function App() {
     const usedCodes = new Set(records.map((item) => item.code.toUpperCase()))
 
     rows.forEach((row) => {
-      const code = sanitizeCode(row.code || generateNextCode(records, row.code))
+      const code = row.code.trim()
+        ? sanitizeCode(row.code)
+        : generateNextCode([...records, ...normalizedRows])
       const name = row.name.trim()
       const clientName = row.client_name.trim()
       const destinationUrl = row.destination_url.trim()
@@ -517,7 +519,9 @@ function App() {
     const nextRows: QrRecord[] = []
 
     csvPreview.rows.forEach((row) => {
-      const code = sanitizeCode(row.code)
+      const code = row.code.trim()
+        ? sanitizeCode(row.code)
+        : generateNextCode([...records, ...nextRows])
       const name = row.name.trim()
       const clientName = row.client_name.trim()
       const destinationUrl = row.destination_url.trim()

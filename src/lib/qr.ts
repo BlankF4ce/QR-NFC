@@ -132,18 +132,18 @@ export function parseCsvPreview(content: string): CsvPreview {
   const seen = new Set<string>()
 
   const valid = rows.filter((row) => {
-    if (!row.code || !row.name || !row.client_name || !row.destination_url) {
+    if (!row.name || !row.client_name || !row.destination_url) {
       errors.push(`Linha com dados incompletos: ${JSON.stringify(row)}`)
       return false
     }
 
-    const codeKey = row.code.trim().toUpperCase()
-    if (seen.has(codeKey)) {
+    const codeKey = row.code.trim() ? sanitizeCode(row.code) : ''
+    if (codeKey && seen.has(codeKey)) {
       duplicates.push(codeKey)
       errors.push(`Código duplicado: ${codeKey}`)
       return false
     }
-    seen.add(codeKey)
+    if (codeKey) seen.add(codeKey)
 
     if (!validateUrl(row.destination_url)) {
       invalidUrls.push(row.code)
