@@ -509,6 +509,40 @@ function App() {
     }
   }
 
+  const createStockBatch = async () => {
+    const accepted = window.confirm(
+      'Criar 100 QR Codes de estoque? Eles ficarão inativos até você configurar cada destino.',
+    )
+    if (!accepted) return
+
+    const stockRecords: QrRecord[] = []
+    const now = new Date().toISOString()
+
+    for (let index = 0; index < 100; index += 1) {
+      const code = generateNextCode([...records, ...stockRecords])
+      stockRecords.push({
+        id: crypto.randomUUID(),
+        code,
+        name: `Estoque ${code}`,
+        client_name: 'Disponível',
+        destination_url: 'https://example.com',
+        active: false,
+        scan_count: 0,
+        last_scan_at: null,
+        created_at: now,
+        updated_at: now,
+      })
+    }
+
+    try {
+      const savedRecords = supabase ? await insertQrRecords(stockRecords) : stockRecords
+      setRecords((current) => [...savedRecords, ...current])
+      showToast('100 QR Codes de estoque criados como inativos.', 'success')
+    } catch {
+      showToast('Não foi possível criar o estoque de QR Codes. Verifique sua conexão e permissões.', 'error')
+    }
+  }
+
   const createBatchFromCsv = async () => {
     if (!csvPreview || csvPreview.valid === 0) {
       showToast('Valide o arquivo CSV antes de gerar os QR Codes.', 'error')
@@ -881,16 +915,25 @@ function App() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-soft">
         <h2 className="mb-4 text-xl font-semibold text-slate-800">Criar lote</h2>
 
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm text-slate-500">Máximo de 100 QR Codes por lote</span>
-          <button
-            type="button"
-            onClick={handleBatchManualAdd}
-            disabled={batchRows.length >= 100}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Adicionar linha
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void createStockBatch()}
+              className="rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100"
+            >
+              Gerar 100 inativos
+            </button>
+            <button
+              type="button"
+              onClick={handleBatchManualAdd}
+              disabled={batchRows.length >= 100}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Adicionar linha
+            </button>
+          </div>
         </div>
 
         <div className="space-y-3">
