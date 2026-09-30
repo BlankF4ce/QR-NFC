@@ -184,8 +184,6 @@ function App() {
       if (!session) {
         setRecords([])
         setRecordsLoading(false)
-      } else {
-        setRecordsLoading(true)
       }
       setAuthState({ isAuthenticated: Boolean(session), email: session?.user.email ?? null })
       setAuthLoading(false)
@@ -199,8 +197,6 @@ function App() {
       if (!data.session) {
         setRecords([])
         setRecordsLoading(false)
-      } else {
-        setRecordsLoading(true)
       }
       setAuthState({ isAuthenticated: Boolean(data.session), email: data.session?.user.email ?? null })
       setAuthLoading(false)
@@ -227,6 +223,8 @@ function App() {
     if (!authState.isAuthenticated) return
 
     let mounted = true
+    setRecordsLoading(true)
+
     void listQrRecords()
       .then((nextRecords) => {
         if (mounted) setRecords(nextRecords)
