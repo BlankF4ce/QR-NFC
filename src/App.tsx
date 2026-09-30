@@ -386,6 +386,71 @@ function App() {
     })
   }
 
+  const toggleSelectedId = (id: string) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
+    )
+  }
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = filterRecords.map((record) => record.id)
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+
+    if (allVisibleSelected) {
+      setSelectedIds((current) => current.filter((id) => !visibleIds.includes(id)))
+      return
+    }
+
+    setSelectedIds((current) => Array.from(new Set([...current, ...visibleIds])))
+  }
+
+  const clearSelectedIds = () => {
+    setSelectedIds([])
+  }
+
+  const selectedRecords = records.filter((record) => selectedIds.includes(record.id))
+
+  const bulkDeleteSelected = async () => {
+    if (selectedRecords.length === 0) return
+
+    const names = selectedRecords.map((record) => record.code).join(', ')
+    const accepted = window.confirm(`Deseja excluir os QR Codes selecionados: ${names}?`)
+    if (!accepted) return
+
+    try {
+      if (supabase) {
+        await Promise.all(selectedRecords.map((record) => deleteQrRecord(record.id)))
+      }
+
+      setRecords((current) => current.filter((record) => !selectedIds.includes(record.id)))
+      setSelectedIds([])
+      showToast(`${selectedRecords.length} QR Codes excluídos com sucesso.`, 'success')
+    } catch {
+      showToast('Não foi possível excluir os QR Codes selecionados.', 'error')
+    }
+  }
+
+  const downloadSelectedPngZip = async () => {
+    if (selectedRecords.length === 0) return
+
+    const zip = new JSZip()
+
+    for (const record of selectedRecords) {
+      const dataUrl = await QRCode.toDataURL(buildDynamicUrl(record.code), {
+        errorCorrectionLevel: 'M',
+        width: 1200,
+        margin: 1,
+        type: 'image/png',
+      })
+      const base64 = dataUrl.split(',')[1]
+      zip.file(`${safeFileName(record.code)}-${safeFileName(record.name)}.png`, base64, { base64: true })
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' })
+    downloadBlob(blob, `qr-codes-selecionados-${selectedRecords.length}.zip`)
+    showToast('ZIP dos QR Codes selecionados baixado com sucesso.', 'success')
+  }
+
   const handleCsvUpload = (file: File) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -422,6 +487,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [selectedQr, setSelectedQr] = useState<QrRecord | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   const handleBatchManualAdd = () => {
     if (batchRows.length >= 100) {
@@ -713,136 +779,224 @@ function App() {
     </div>
   )
 
-  const renderQrCodes = () => (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-1 flex-col gap-3 md:flex-row">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar código, nome, cliente ou URL"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-brand-500 focus:bg-white md:max-w-md"
-            />
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-500 focus:bg-white"
-            >
-              <option value="all">Todos</option>
-              <option value="active">Ativos</option>
-              <option value="inactive">Inativos</option>
-            </select>
+  const renderQrCodes = () => {
+    const visibleActiveIds = filterRecords.filter((record) => record.active).map((record) => record.id)
+    const allVisibleSelected = filterRecords.length > 0 && filterRecords.every((record) => selectedIds.includes(record.id))
+    const allVisibleActiveSelected =
+      visibleActiveIds.length > 0 && visibleActiveIds.every((id) => selectedIds.includes(id))
+
+    return (
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-soft">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-1 flex-col gap-3 md:flex-row">
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar código, nome, cliente ou URL"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-brand-500 focus:bg-white md:max-w-md"
+              />
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-500 focus:bg-white"
+              >
+                <option value="all">Todos</option>
+                <option value="active">Ativos</option>
+                <option value="inactive">Inativos</option>
+              </select>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-xl border border-brand-100 bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700">
+                {selectedIds.length} selecionado{selectedIds.length === 1 ? '' : 's'}
+              </div>
+              <button
+                type="button"
+                onClick={toggleSelectAllVisible}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                {allVisibleSelected ? 'Desmarcar visíveis' : 'Selecionar visíveis'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const activeVisibleIds = filterRecords.filter((record) => record.active).map((record) => record.id)
+                  const shouldSelectAllActive = activeVisibleIds.length > 0 && !activeVisibleIds.every((id) => selectedIds.includes(id))
+
+                  if (shouldSelectAllActive) {
+                    setSelectedIds((current) => Array.from(new Set([...current, ...activeVisibleIds])))
+                    return
+                  }
+
+                  setSelectedIds((current) => current.filter((id) => !activeVisibleIds.includes(id)))
+                }}
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
+              >
+                {allVisibleActiveSelected ? 'Desmarcar ativos' : 'Selecionar ativos'}
+              </button>
+              <button
+                type="button"
+                onClick={clearSelectedIds}
+                disabled={selectedIds.length === 0}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Desmarcar tudo
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadSelectedPngZip()}
+                disabled={selectedIds.length === 0}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Baixar selecionados
+              </button>
+              <button
+                type="button"
+                onClick={() => void bulkDeleteSelected()}
+                disabled={selectedIds.length === 0}
+                className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Excluir selecionados
+              </button>
+              <button
+                type="button"
+                onClick={exportAllCsv}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Exportar CSV
+              </button>
+            </div>
           </div>
-
-          <button
-            type="button"
-            onClick={exportAllCsv}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Exportar CSV
-          </button>
         </div>
-      </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 font-medium">Código</th>
-                <th className="px-4 py-3 font-medium">Nome</th>
-                <th className="px-4 py-3 font-medium">Cliente</th>
-                <th className="px-4 py-3 font-medium">Destino</th>
-                <th className="px-4 py-3 font-medium">Scans</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filterRecords.length === 0 ? (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft">
+          <div className="overflow-x-auto">
+            <table className="min-w-[980px] w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
-                    Nenhum QR Code encontrado.
-                  </td>
+                  <th className="px-3 py-3 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAllVisible}
+                      aria-label="Selecionar todos os QR Codes visíveis"
+                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    />
+                  </th>
+                  <th className="px-4 py-3 font-medium">Código</th>
+                  <th className="px-4 py-3 font-medium">Nome</th>
+                  <th className="px-4 py-3 font-medium">Cliente</th>
+                  <th className="px-4 py-3 font-medium">Destino</th>
+                  <th className="px-4 py-3 font-medium">Scans</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Ações</th>
                 </tr>
-              ) : (
-                filterRecords.map((record) => (
-                  <tr key={record.id} className="border-t border-slate-100 align-top">
-                    <td className="px-4 py-4 font-semibold text-slate-800">{record.code}</td>
-                    <td className="px-4 py-4">{record.name}</td>
-                    <td className="px-4 py-4">{record.client_name}</td>
-                    <td className="max-w-xs px-4 py-4 truncate text-slate-500">{record.destination_url}</td>
-                    <td className="px-4 py-4">{record.scan_count}</td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          record.active
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {record.active ? 'Ativo' : 'Inativo'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const detail = records.find((item) => item.id === record.id)
-                            if (detail) {
-                              setSelectedQr(detail)
-                            }
-                          }}
-                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          Visualizar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => toggleStatus(record.id)}
-                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          {record.active ? 'Desativar' : 'Ativar'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const detail = records.find((item) => item.id === record.id)
-                            if (detail) {
-                              setSelectedQr(detail)
-                            }
-                          }}
-                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void downloadQrPng(record)}
-                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          PNG
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void deleteQr(record.id)}
-                          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
-                        >
-                          Excluir
-                        </button>
-                      </div>
+              </thead>
+              <tbody>
+                {filterRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                      Nenhum QR Code encontrado.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  filterRecords.map((record) => (
+                    <tr key={record.id} className="border-t border-slate-100 align-top transition hover:bg-slate-50/80">
+                      <td className="px-3 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(record.id)}
+                          onChange={() => toggleSelectedId(record.id)}
+                          aria-label={`Selecionar QR Code ${record.code}`}
+                          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        />
+                      </td>
+                      <td className="px-4 py-4 font-semibold text-slate-800">{record.code}</td>
+                      <td className="px-4 py-4">{record.name}</td>
+                      <td className="px-4 py-4">{record.client_name}</td>
+                      <td className="max-w-xs px-4 py-4 truncate text-slate-500">{record.destination_url}</td>
+                      <td className="px-4 py-4">{record.scan_count}</td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                            record.active
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {record.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            title="Visualizar"
+                            aria-label={`Visualizar QR Code ${record.code}`}
+                            onClick={() => {
+                              const detail = records.find((item) => item.id === record.id)
+                              if (detail) {
+                                setSelectedQr(detail)
+                              }
+                            }}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-base text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
+                          >
+                            👁
+                          </button>
+                          <button
+                            type="button"
+                            title={record.active ? 'Desativar' : 'Ativar'}
+                            aria-label={record.active ? `Desativar QR Code ${record.code}` : `Ativar QR Code ${record.code}`}
+                            onClick={() => toggleStatus(record.id)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-base text-slate-700 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700"
+                          >
+                            {record.active ? '⏸' : '▶'}
+                          </button>
+                          <button
+                            type="button"
+                            title="Editar"
+                            aria-label={`Editar QR Code ${record.code}`}
+                            onClick={() => {
+                              const detail = records.find((item) => item.id === record.id)
+                              if (detail) {
+                                setSelectedQr(detail)
+                              }
+                            }}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-base text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            title="Baixar PNG"
+                            aria-label={`Baixar PNG do QR Code ${record.code}`}
+                            onClick={() => void downloadQrPng(record)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-base text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                          >
+                            ⬇️
+                          </button>
+                          <button
+                            type="button"
+                            title="Excluir"
+                            aria-label={`Excluir QR Code ${record.code}`}
+                            onClick={() => void deleteQr(record.id)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-base text-red-700 transition hover:bg-red-100"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const [formData, setFormData] = useState({
     code: '',
