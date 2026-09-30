@@ -267,6 +267,8 @@ function App() {
     setToast({ message, kind })
   }
 
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
   const handleLogin = async (email: string, password: string) => {
     try {
       if (supabase && isSupabaseConfigured) {
@@ -487,7 +489,6 @@ function App() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [selectedQr, setSelectedQr] = useState<QrRecord | null>(null)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   const handleBatchManualAdd = () => {
     if (batchRows.length >= 100) {
